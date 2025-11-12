@@ -1,31 +1,32 @@
 # ResilientDB MCP Server
 
-A Model Context Protocol (MCP) server for interacting with ResilientDB, a high-performance blockchain platform. This server allows Large Language Models (LLMs) like Claude to interact with ResilientDB through smart contract operations and GraphQL queries.
+A Model Context Protocol (MCP) server for interacting with ResilientDB, a high-performance blockchain platform. This server allows Large Language Models (LLMs) like Claude to interact with ResilientDB through GraphQL queries and HTTP REST API.
 
 ## Overview
 
 This MCP server bridges the gap between AI agents (like Claude Desktop) and ResilientDB by providing a standardized interface for:
-- **Smart Contract Operations**: Compile, deploy, and execute smart contracts using ResContract CLI
-- **GraphQL Operations**: Create accounts, manage transactions, and query data
-- **Key-Value Operations**: Store and retrieve data using ResilientDB's key-value store
+- **GraphQL Operations**: Asset transactions on the blockchain (port 8000)
+- **HTTP REST API Operations**: Key-value storage operations (port 18000 - Crow server)
+
+**Note:** For midterm, this implementation focuses on GraphQL and HTTP REST API integration. Smart contract operations (ResContract CLI) are temporarily disabled.
 
 ## Features
 
-### Smart Contract Operations
-- `compileContract`: Compile smart contracts using ResContract CLI
-- `deployContract`: Deploy compiled contracts to the ResilientDB blockchain
-- `executeContract`: Execute contract methods (read/write operations)
-- `getContractState`: Retrieve the current state of a deployed contract
+### GraphQL Operations (Port 8000)
+- `createAccount`: Create new accounts in ResilientDB (if supported)
+- `getTransaction`: Retrieve asset transaction details by ID (blockchain transactions)
+- `postTransaction`: Post new asset transactions to the blockchain (requires PrepareAsset with crypto keys)
+- `updateTransaction`: Update existing transactions (note: blockchain transactions are typically immutable)
 
-### GraphQL Operations
-- `createAccount`: Create new accounts in ResilientDB
-- `getTransaction`: Retrieve transaction details by ID
-- `postTransaction`: Post new transactions to the blockchain
-- `updateTransaction`: Update existing transactions
+### Key-Value Operations (Port 18000 - HTTP REST API)
+- `get`: Retrieve values by key using HTTP REST API (Crow server)
+- `set`: Store key-value pairs using HTTP REST API (Crow server)
 
-### Key-Value Operations
-- `get`: Retrieve values by key
-- `set`: Store key-value pairs
+**Note:** For midterm, smart contract operations (compile, deploy, execute) are temporarily removed. Focus is on GraphQL and HTTP REST API integration.
+
+**Important Architecture Notes:**
+- **GraphQL (port 8000)**: Used for blockchain asset transactions
+- **HTTP/Crow (port 18000)**: Used for key-value operations
 
 ## Installation
 
@@ -57,8 +58,8 @@ cp .env.example .env
 
 4. Update `.env` file with your settings:
 ```env
-RESILIENTDB_GRAPHQL_URL=http://localhost:9000/graphql
-RESCONTRACT_CLI_PATH=rescontract
+RESILIENTDB_GRAPHQL_URL=http://localhost:8000/graphql
+RESILIENTDB_HTTP_URL=http://localhost:18000
 ```
 
 ### Docker Installation
@@ -79,13 +80,17 @@ docker run -i --rm mcp/resilientdb
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `RESILIENTDB_GRAPHQL_URL` | GraphQL endpoint URL | `http://localhost:9000/graphql` |
-| `RESCONTRACT_CLI_PATH` | Path to ResContract CLI executable | `rescontract` |
+| `RESILIENTDB_GRAPHQL_URL` | GraphQL endpoint URL (port 8000 for asset transactions) | `http://localhost:8000/graphql` |
+| `RESILIENTDB_HTTP_URL` | HTTP/Crow server URL (port 18000 for KV operations) | `http://localhost:18000` |
 | `RESILIENTDB_API_KEY` | Optional API key for authentication | None |
 | `RESILIENTDB_AUTH_TOKEN` | Optional auth token | None |
 | `REQUEST_TIMEOUT` | Request timeout in seconds | `30` |
 | `TRANSACTION_POLL_INTERVAL` | Polling interval for transactions | `1.0` |
 | `MAX_POLL_ATTEMPTS` | Maximum polling attempts | `30` |
+
+**Important Notes:**
+- GraphQL (port 8000) is used for **asset transactions** (blockchain)
+- HTTP/Crow (port 18000) is used for **key-value operations** (simple storage)
 
 ## Usage with Claude Desktop
 
@@ -103,8 +108,8 @@ Add the MCP server to your Claude Desktop configuration:
       "command": "python",
       "args": ["/path/to/ResilientDB-MCP/server.py"],
       "env": {
-        "RESILIENTDB_GRAPHQL_URL": "http://localhost:9000/graphql",
-        "RESCONTRACT_CLI_PATH": "rescontract"
+        "RESILIENTDB_GRAPHQL_URL": "http://localhost:8000/graphql",
+        "RESILIENTDB_HTTP_URL": "http://localhost:18000"
       }
     }
   }
@@ -140,59 +145,8 @@ Create a new account in ResilientDB.
 }
 ```
 
-### compileContract
-Compile a smart contract using ResContract CLI.
-
-**Parameters:**
-- `contractPath` (required): Path to the contract file
-- `outputDir` (optional): Output directory for compiled contract
-
-**Example:**
-```json
-{
-  "contractPath": "/path/to/contract.sol",
-  "outputDir": "/path/to/output"
-}
-```
-
-### deployContract
-Deploy a compiled smart contract to ResilientDB.
-
-**Parameters:**
-- `contractPath` (required): Path to the compiled contract
-- `accountId` (optional): Account ID for deployment
-- `constructorArgs` (optional): Constructor arguments
-
-**Example:**
-```json
-{
-  "contractPath": "/path/to/compiled_contract.json",
-  "accountId": "my-account-123",
-  "constructorArgs": ["arg1", "arg2"]
-}
-```
-
-### executeContract
-Execute a method on a deployed smart contract.
-
-**Parameters:**
-- `contractAddress` (required): Address of the deployed contract
-- `methodName` (required): Name of the method to execute
-- `methodArgs` (optional): Method arguments
-- `accountId` (optional): Account ID for execution
-- `transactionType` (optional): "call" for read operations, "send" for write operations (default: "call")
-
-**Example:**
-```json
-{
-  "contractAddress": "0x123...",
-  "methodName": "getValue",
-  "transactionType": "call"
-}
-```
-
 ### getTransaction
-Get transaction details by transaction ID.
+Get asset transaction details by transaction ID (GraphQL - port 8000).
 
 **Parameters:**
 - `transactionId` (required): Transaction ID to retrieve
@@ -204,21 +158,29 @@ Get transaction details by transaction ID.
 }
 ```
 
+**Note:** This is for blockchain asset transactions, not KV transactions.
+
 ### postTransaction
-Post a new transaction to ResilientDB.
+Post a new asset transaction to ResilientDB (GraphQL - port 8000).
 
 **Parameters:**
-- `data` (required): Transaction data as key-value pairs
+- `data` (required): Transaction data in PrepareAsset format with crypto keys and signatures
 
 **Example:**
 ```json
 {
   "data": {
-    "key": "value",
-    "amount": 100
+    "operation": "CREATE",
+    "asset": {
+      "data": {...}
+    },
+    "outputs": [...],
+    "inputs": [...]
   }
 }
 ```
+
+**Note:** This requires PrepareAsset format with cryptographic keys. For simple KV operations, use the `set` tool instead.
 
 ### updateTransaction
 Update an existing transaction.
@@ -238,7 +200,7 @@ Update an existing transaction.
 ```
 
 ### get
-Retrieve a value from ResilientDB by key.
+Retrieve a value from ResilientDB by key (HTTP REST API - port 18000).
 
 **Parameters:**
 - `key` (required): Key to retrieve
@@ -250,12 +212,14 @@ Retrieve a value from ResilientDB by key.
 }
 ```
 
+**Note:** This uses HTTP REST API (Crow server on port 18000).
+
 ### set
-Store a key-value pair in ResilientDB.
+Store a key-value pair in ResilientDB (HTTP REST API - port 18000).
 
 **Parameters:**
 - `key` (required): Key to store
-- `value` (required): Value to store
+- `value` (required): Value to store (can be any JSON-serializable value)
 
 **Example:**
 ```json
@@ -265,18 +229,7 @@ Store a key-value pair in ResilientDB.
 }
 ```
 
-### getContractState
-Get the current state of a deployed smart contract.
-
-**Parameters:**
-- `contractAddress` (required): Address of the deployed contract
-
-**Example:**
-```json
-{
-  "contractAddress": "0x123..."
-}
-```
+**Note:** This uses HTTP REST API (Crow server on port 18000).
 
 ## Architecture
 
@@ -288,19 +241,27 @@ The MCP server acts as a mediator between the MCP host (Claude Desktop) and Resi
 │ Desktop     │         │ (Python)     │         │ Backend     │
 └─────────────┘         └──────────────┘         └─────────────┘
                               │
-                              ├──▶ GraphQL Client
-                              │    (Account, Transaction, KV ops)
+                              ├──▶ GraphQL Client (port 8000)
+                              │    (Asset Transactions only)
                               │
-                              └──▶ ResContract CLI
-                                   (Smart Contract ops)
+                              └──▶ HTTP REST Client (port 18000)
+                                   (Key-Value Operations)
 ```
 
 ### Routing Logic
 
 The server automatically routes requests to the appropriate service:
-- **Smart Contract Operations** → ResContract CLI
-- **Data Operations** → GraphQL API
-- **Hybrid Operations** → Tries GraphQL first, falls back to ResContract CLI
+- **Asset Transactions** → GraphQL API (port 8000)
+  - `getTransaction`: Retrieve asset transactions
+  - `postTransaction`: Post asset transactions (requires PrepareAsset)
+  - `createAccount`: Create accounts (if supported)
+  - `updateTransaction`: Update transactions (if supported)
+
+- **Key-Value Operations** → HTTP REST API (port 18000 - Crow server)
+  - `get`: Retrieve key-value pairs
+  - `set`: Store key-value pairs
+
+**Important:** KV operations use HTTP REST API (port 18000).
 
 ## Development
 
@@ -347,9 +308,33 @@ If you get an error about ResContract CLI not being found:
 
 If you encounter GraphQL connection errors:
 1. Verify ResilientDB is running
-2. Check the `RESILIENTDB_GRAPHQL_URL` is correct
+2. Check the `RESILIENTDB_GRAPHQL_URL` is correct (should be port 8000, not 9000)
 3. Ensure network connectivity to the GraphQL endpoint
 4. Check firewall settings
+5. Verify GraphQL server is accessible: `curl http://localhost:8000/graphql`
+
+### HTTP Connection Errors
+
+If you encounter HTTP connection errors for KV operations:
+1. Verify Crow HTTP server is running on port 18000
+2. Check the `RESILIENTDB_HTTP_URL` is correct
+3. Test HTTP endpoint: `curl http://localhost:18000/v1/transactions/test`
+4. Ensure the HTTP server is accessible
+
+### Key-Value Operations Not Working
+
+If KV operations (get/set) fail:
+1. Verify you're using HTTP REST API (port 18000), not GraphQL
+2. Check that Crow HTTP server is running
+3. Test with curl:
+   ```bash
+   # Set a value
+   curl -X POST -d '{"id":"test","value":"hello"}' http://localhost:18000/v1/transactions/commit
+   
+   # Get a value
+   curl http://localhost:18000/v1/transactions/test
+   ```
+4. Verify HTTP REST API (port 18000) is accessible for KV operations
 
 ### Transaction Timeouts
 
@@ -358,12 +343,35 @@ If transactions timeout:
 2. Check ResilientDB blockchain status
 3. Verify network latency
 
+## Key Architecture Insights
+
+### Service Separation
+
+ResilientDB uses different services for different operations:
+
+1. **GraphQL Server (Port 8000)**
+   - Purpose: Blockchain asset transactions
+   - Operations: `getTransaction`, `postTransaction` (with PrepareAsset)
+
+2. **HTTP/Crow Server (Port 18000)**
+   - Purpose: Simple key-value storage
+   - Operations: `get`, `set` (via REST API)
+   - Endpoints: 
+     - `POST /v1/transactions/commit` (for set)
+     - `GET /v1/transactions/{key}` (for get)
+
+### Why This Matters
+
+- **KV operations use HTTP REST API** (port 18000) for `set`/`get` operations
+- **Asset transactions use GraphQL** (port 8000) and require PrepareAsset format
+- **Wrong port numbers** (e.g., 9000 instead of 8000) will cause connection errors
+
 ## References
 
 - [ResilientDB GitHub](https://github.com/apache/incubator-resilientdb)
 - [ResilientDB Documentation](https://resilientdb.incubator.apache.org/)
-- [ResContract CLI Documentation](https://beacon.resilientdb.com/docs/rescontract)
 - [ResilientDB GraphQL API](https://beacon.resilientdb.com/docs/resilientdb_graphql)
+- [ResilientDB Quick Start](https://quickstart.resilientdb.com/)
 - [MCP Protocol Documentation](https://modelcontextprotocol.io/)
 
 ## License
