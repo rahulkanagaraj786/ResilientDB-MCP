@@ -69,10 +69,14 @@ class GraphQLClient:
         """
         Get transaction by ID via GraphQL.
         Returns RetrieveTransaction with all available fields.
+        
+        Based on official documentation: https://beacon.resilientdb.com/docs/resilientdb_graphql#get-transaction-by-id
+        
+        Note: All fields except 'metadata' are NON_NULL and must be included in the query.
         """
         query = """
-        query GetTransaction($transactionId: ID!) {
-            getTransaction(id: $transactionId) {
+        query GetTx($id: ID!) {
+            getTransaction(id: $id) {
                 id
                 version
                 amount
@@ -86,7 +90,7 @@ class GraphQLClient:
             }
         }
         """
-        return await self.execute_query(query, {"transactionId": transaction_id})
+        return await self.execute_query(query, {"id": transaction_id})
     
     async def post_transaction(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -97,7 +101,11 @@ class GraphQLClient:
         - signerPublicKey (String): Public key of the signer
         - signerPrivateKey (String): Private key of the signer
         - recipientPublicKey (String): Public key of the recipient
-        - asset (JSONScalar): Asset data as JSON
+        - asset (JSONScalar): Asset data as JSON object with 'data' field (not string!)
+        
+        Based on official documentation: https://beacon.resilientdb.com/docs/resilientdb_graphql#get-transaction-by-id
+        
+        The asset must be structured as: {"data": {...}} where {...} contains your actual asset data.
         
         Returns CommitTransaction with transaction ID.
         """
@@ -110,8 +118,30 @@ class GraphQLClient:
                 f"Required fields: {', '.join(required_fields)}"
             )
         
+        # IMPORTANT: Keep asset as dict/object - JSONScalar expects JSON object, not string
+        # MCP framework may convert the asset object to a string, so we need to parse it back
+        asset = data["asset"]
+        if isinstance(asset, str):
+            try:
+                asset = json.loads(asset)
+            except json.JSONDecodeError as e:
+                raise Exception(
+                    f"Failed to parse asset JSON string: {e}. "
+                    f"Asset value: {asset[:100]}..."
+                )
+        
+        # Ensure asset is a dict/object (not a list, string, or primitive)
+        if not isinstance(asset, dict):
+            raise Exception(
+                f"Asset must be a JSON object (dict), but got {type(asset).__name__}. "
+                f"Value: {str(asset)[:100]}..."
+            )
+        
+        # Update data with parsed asset
+        data["asset"] = asset
+        
         mutation = """
-        mutation PostTransaction($data: PrepareAsset!) {
+        mutation Test($data: PrepareAsset!) {
             postTransaction(data: $data) {
                 id
             }
@@ -174,4 +204,3 @@ class GraphQLClient:
                 "status": "committed",
                 "response": response_text
             }
-

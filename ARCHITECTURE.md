@@ -39,7 +39,7 @@ The ResilientDB MCP Server is a Model Context Protocol (MCP) implementation that
 │  ┌──────────────────┐              ┌──────────────────────┐     │
 │  │ GraphQL Server   │              │ HTTP/Crow Server     │     │
 │  │ (Port 8000)      │              │ (Port 18000)         │     │
-│  │ - Asset Txns     │              │ - Key-Value Ops      │     │
+│  │ - Asset Txns     │              │ - Key-Value Ops      │     │git 
 │  └──────────────────┘              └──────────────────────┘     │
 │                                                                   │
 │  ┌──────────────────────────────────────────────────────────┐   │
