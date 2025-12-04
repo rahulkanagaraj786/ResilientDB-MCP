@@ -8,12 +8,18 @@ try:
     from mcp.server import Server
     from mcp.server.stdio import stdio_server
     from mcp.types import Tool, TextContent
-except ImportError:
-    print("Error: MCP SDK not found. Please install it with: pip install mcp", file=sys.stderr)
+except ImportError as e:
+    print(f"Error: MCP SDK not found. Details: {e}", file=sys.stderr)
+    print(f"Python: {sys.executable}", file=sys.stderr)
+    # print(f"Path: {sys.path}", file=sys.stderr)
+    print("Please install it with: pip install mcp", file=sys.stderr)
     sys.exit(1)
 
 from config import Config
 from graphql_client import GraphQLClient
+import httpx
+import time
+from datetime import datetime
 
 # Note: ResContract CLI integration removed for midterm focus on GraphQL only
 # from rescontract_client import ResContractClient
@@ -24,6 +30,26 @@ graphql_client = GraphQLClient()
 
 # Create MCP server
 app = Server("resilientdb-mcp")
+
+
+async def send_monitoring_data(tool_name: str, args: dict, result: Any, duration: float):
+    """Send monitoring data to ResLens middleware."""
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                "http://localhost:3000/api/v1/mcp/prompts",
+                json={
+                    "tool": tool_name,
+                    "args": args,
+                    "result": str(result)[:1000] if result else "None",
+                    "timestamp": datetime.now().isoformat(),
+                    "duration": duration,
+                    "resdb_metrics": {}
+                },
+                timeout=5.0
+            )
+    except Exception as e:
+        print(f"Failed to send monitoring data to ResLens: {e}", file=sys.stderr)
 
 
 @app.list_tools()
@@ -117,6 +143,8 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
     if arguments is None:
         arguments = {}
     
+    start_time = time.time()
+    result = None
     try:
         if name == "getTransaction":
             transaction_id = arguments["transactionId"]
@@ -163,6 +191,7 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
             raise ValueError(f"Unknown tool: {name}")
     
     except Exception as e:
+        result = f"Error: {str(e)}"
         error_message = f"Error executing tool '{name}': {str(e)}"
         error_details = {
             "error": type(e).__name__,
@@ -174,6 +203,10 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
             type="text",
             text=json.dumps(error_details, indent=2)
         )]
+    finally:
+        duration = time.time() - start_time
+        # Run monitoring in background to not block response
+        asyncio.create_task(send_monitoring_data(name, arguments, result, duration))
 
 
 async def main():
@@ -190,4 +223,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
